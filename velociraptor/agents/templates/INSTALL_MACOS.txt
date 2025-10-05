@@ -1,0 +1,87 @@
+================================================================================
+  CyberBlue Velociraptor Agent - macOS Installation Instructions
+  Server: {{SERVER_IP}}:8000
+================================================================================
+
+REQUIREMENTS:
+  - macOS 10.14+ (Mojave or newer)
+  - Root or sudo privileges
+  - Network access to {{SERVER_IP}}:8000
+
+INSTALLATION STEPS:
+
+1. Extract this package:
+   unzip velociraptor-agent-macos.zip
+   cd velociraptor-agent-macos
+
+2. Move binary to system path:
+   sudo mv velociraptor-macos /usr/local/sbin/velociraptor
+   sudo chmod +x /usr/local/sbin/velociraptor
+
+3. Remove quarantine attribute (macOS security):
+   sudo xattr -d com.apple.quarantine /usr/local/sbin/velociraptor
+
+4. Create configuration directory:
+   sudo mkdir -p /etc/velociraptor
+
+5. Move configuration file:
+   sudo mv client.config.yaml /etc/velociraptor/
+   sudo chmod 600 /etc/velociraptor/client.config.yaml
+
+6. Create LaunchDaemon:
+   sudo tee /Library/LaunchDaemons/com.velocidex.velociraptor.plist > /dev/null <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.velocidex.velociraptor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/sbin/velociraptor</string>
+        <string>--config</string>
+        <string>/etc/velociraptor/client.config.yaml</string>
+        <string>client</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/var/log/velociraptor.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/velociraptor.error.log</string>
+</dict>
+</plist>
+EOF
+
+7. Set correct permissions and load:
+   sudo chmod 644 /Library/LaunchDaemons/com.velocidex.velociraptor.plist
+   sudo launchctl load /Library/LaunchDaemons/com.velocidex.velociraptor.plist
+
+8. Verify the service is running:
+   sudo launchctl list | grep velociraptor
+
+VERIFICATION:
+  - The agent should appear in Velociraptor server within 1-2 minutes
+  - Access server GUI: https://{{SERVER_IP}}:7000
+  - Default credentials: admin / cyberblue
+  - Look for this computer's hostname in the Client list
+
+TROUBLESHOOTING:
+  - Check if running: sudo launchctl list | grep velociraptor
+  - View logs: tail -f /var/log/velociraptor.log
+  - View errors: tail -f /var/log/velociraptor.error.log
+  - Restart: sudo launchctl unload /Library/LaunchDaemons/com.velocidex.velociraptor.plist && sudo launchctl load /Library/LaunchDaemons/com.velocidex.velociraptor.plist
+  - Stop: sudo launchctl unload /Library/LaunchDaemons/com.velocidex.velociraptor.plist
+
+FIREWALL:
+  - Ensure outbound connections to {{SERVER_IP}}:8000 are allowed
+
+NOTE:
+  - This package includes the correct binary for your Mac (Intel or Apple Silicon)
+
+================================================================================
+For support: Check CyberBlue documentation or Velociraptor docs
+================================================================================
+

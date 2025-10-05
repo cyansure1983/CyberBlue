@@ -1,0 +1,62 @@
+================================================================================
+  CyberBlue Wazuh Agent - macOS Installation Instructions
+  Manager Server: {{MANAGER_IP}}:1514
+================================================================================
+
+REQUIREMENTS:
+  - macOS 10.15+ (Catalina or newer)
+  - Root or sudo privileges
+  - Network access to {{MANAGER_IP}}:1514
+
+INSTALLATION STEPS:
+
+1. Download Wazuh Agent for macOS:
+   Visit: https://packages.wazuh.com/4.x/macos/wazuh-agent-4.12.0-1.pkg
+   Or run:
+   curl -LO https://packages.wazuh.com/4.x/macos/wazuh-agent-4.12.0-1.pkg
+
+2. Install the package:
+   sudo installer -pkg wazuh-agent-4.12.0-1.pkg -target /
+
+3. Configure Manager IP:
+   sudo cp ossec.conf /Library/Ossec/etc/ossec.conf
+   sudo chmod 640 /Library/Ossec/etc/ossec.conf
+   sudo chown root:wazuh /Library/Ossec/etc/ossec.conf
+
+4. Start Wazuh Agent:
+   sudo /Library/Ossec/bin/wazuh-control start
+
+5. Enable Auto-start:
+   sudo /Library/Ossec/bin/wazuh-control enable
+
+6. Verify Service is Running:
+   sudo /Library/Ossec/bin/wazuh-control status
+
+VERIFICATION:
+  - Agent should register with Wazuh manager within 1-2 minutes
+  - Access Wazuh Dashboard: https://{{MANAGER_IP}}:7001
+  - Default credentials: admin / SecretPassword
+  - Navigate to: Management → Agents
+  - Look for this computer's hostname
+
+TROUBLESHOOTING:
+  - Check status: sudo /Library/Ossec/bin/wazuh-control status
+  - View logs: sudo tail -f /Library/Ossec/logs/ossec.log
+  - Restart: sudo /Library/Ossec/bin/wazuh-control restart
+  - Stop: sudo /Library/Ossec/bin/wazuh-control stop
+  - Uninstall: sudo /Library/Ossec/bin/wazuh-control stop && sudo rm -rf /Library/Ossec
+
+FIREWALL:
+  - Ensure outbound TCP connections to {{MANAGER_IP}}:1514 are allowed
+
+IMPORTANT NOTES:
+  - Agent name defaults to hostname
+  - Installation path: /Library/Ossec/
+  - Config file: /Library/Ossec/etc/ossec.conf
+  - Logs: /Library/Ossec/logs/
+  - macOS may require security approval for system extensions
+
+================================================================================
+For support: Check CyberBlue documentation or Wazuh docs at docs.wazuh.com
+================================================================================
+

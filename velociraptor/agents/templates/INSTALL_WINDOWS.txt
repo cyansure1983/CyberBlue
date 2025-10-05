@@ -1,0 +1,53 @@
+================================================================================
+  CyberBlue Velociraptor Agent - Windows Installation Instructions
+  Server: {{SERVER_IP}}:8000
+================================================================================
+
+REQUIREMENTS:
+  - Windows 10/11 or Server 2016+
+  - Administrator privileges
+  - Network access to {{SERVER_IP}}:8000
+
+INSTALLATION STEPS:
+
+1. Extract this ZIP file to a folder (e.g., C:\Velociraptor)
+
+2. Open PowerShell as Administrator:
+   - Press Windows Key
+   - Type "PowerShell"
+   - Right-click "Windows PowerShell"
+   - Select "Run as Administrator"
+
+3. Navigate to the extracted folder:
+   cd C:\Velociraptor
+
+4. Install as Windows Service:
+   .\velociraptor-windows.exe --config client.config.yaml service install
+
+5. Start the service:
+   Start-Service Velociraptor
+
+6. Verify the service is running:
+   Get-Service Velociraptor
+
+VERIFICATION:
+  - The agent should appear in Velociraptor server within 1-2 minutes
+  - Access server GUI: https://{{SERVER_IP}}:7000
+  - Default credentials: admin / cyberblue
+  - Look for this computer's hostname in the Client list
+
+TROUBLESHOOTING:
+  - Check service status: Get-Service Velociraptor
+  - View logs: Get-EventLog -LogName Application -Source Velociraptor -Newest 20
+  - Restart service: Restart-Service Velociraptor
+  - Stop service: Stop-Service Velociraptor
+  - Uninstall: .\velociraptor-windows.exe service remove
+
+FIREWALL:
+  - Ensure outbound connections to {{SERVER_IP}}:8000 are allowed
+  - Windows Firewall should automatically allow the service
+
+================================================================================
+For support: Check CyberBlue documentation or Velociraptor docs
+================================================================================
+

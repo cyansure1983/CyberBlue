@@ -1,0 +1,41 @@
+# Fleet Osquery Configuration for CyberBlue
+# Server: {{SERVER_IP}}:7007
+# Enrollment Secret: Pre-configured (in secret.txt)
+
+# Fleet Server Connection (HTTP for lab environment)
+--tls_hostname={{SERVER_IP}}:7007
+
+# Enrollment (secret loaded from absolute path)
+--enroll_secret_path=C:\Program Files\osquery\secret.txt
+--enroll_tls_endpoint=/api/v1/osquery/enroll
+
+# Configuration
+--config_plugin=tls
+--config_tls_endpoint=/api/v1/osquery/config
+--config_refresh=60
+
+# Distributed Queries
+--distributed_plugin=tls
+--distributed_interval=10
+--distributed_tls_read_endpoint=/api/v1/osquery/distributed/read
+--distributed_tls_write_endpoint=/api/v1/osquery/distributed/write
+
+# Logging
+--logger_plugin=tls
+--logger_tls_endpoint=/api/v1/osquery/log
+--logger_tls_period=10
+
+# Host Identification
+--host_identifier=hostname
+
+# Disable TLS certificate verification (lab environment)
+--tls_server_certs=
+
+# Database and logging paths (Windows)
+--database_path=C:\ProgramData\osquery\osquery.db
+--logger_path=C:\ProgramData\osquery\log
+
+# Verbose logging for troubleshooting
+--verbose=true
+--logger_min_status=0
+

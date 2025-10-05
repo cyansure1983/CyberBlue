@@ -1,0 +1,66 @@
+================================================================================
+  CyberBlue Wazuh Agent - Windows Installation Instructions
+  Manager Server: {{MANAGER_IP}}:1514
+================================================================================
+
+REQUIREMENTS:
+  - Windows 10/11 or Server 2016+
+  - Administrator privileges
+  - Network access to {{MANAGER_IP}}:1514
+
+INSTALLATION STEPS:
+
+1. Extract this ZIP file to a folder (e.g., C:\Wazuh)
+
+2. Install Wazuh Agent:
+   
+   Option A - Command Line (Recommended):
+   Open PowerShell as Administrator and run:
+   
+   msiexec /i wazuh-agent-windows.msi /q WAZUH_MANAGER="{{MANAGER_IP}}" WAZUH_REGISTRATION_SERVER="{{MANAGER_IP}}" WAZUH_AGENT_NAME="%COMPUTERNAME%"
+
+   Option B - GUI Installation:
+   - Double-click wazuh-agent-windows.msi
+   - Follow installation wizard
+   - Enter Manager IP: {{MANAGER_IP}}
+   - Click Install
+
+3. Apply Pre-configured Settings:
+   
+   Copy-Item ossec.conf "C:\Program Files (x86)\ossec-agent\ossec.conf" -Force
+
+4. Start Wazuh Agent Service:
+   
+   NET START WazuhSvc
+
+5. Verify Service is Running:
+   
+   Get-Service WazuhSvc
+
+VERIFICATION:
+  - Agent should register with Wazuh manager within 1-2 minutes
+  - Access Wazuh Dashboard: https://{{MANAGER_IP}}:7001
+  - Default credentials: admin / SecretPassword
+  - Navigate to: Management → Agents
+  - Look for this computer's hostname
+
+TROUBLESHOOTING:
+  - Check service: Get-Service WazuhSvc | Format-List
+  - View logs: Get-Content "C:\Program Files (x86)\ossec-agent\ossec.log" -Tail 50
+  - Restart service: Restart-Service WazuhSvc
+  - Stop service: Stop-Service WazuhSvc
+  - Uninstall: Control Panel → Programs → Uninstall Wazuh Agent
+
+FIREWALL:
+  - Ensure outbound TCP connections to {{MANAGER_IP}}:1514 are allowed
+  - Windows Firewall should automatically allow the service
+
+IMPORTANT NOTES:
+  - Agent name defaults to computer hostname
+  - Logs location: C:\Program Files (x86)\ossec-agent\
+  - Config file: C:\Program Files (x86)\ossec-agent\ossec.conf
+
+================================================================================
+For support: Check CyberBlue documentation or Wazuh docs at docs.wazuh.com
+================================================================================
+

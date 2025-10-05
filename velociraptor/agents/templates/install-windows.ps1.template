@@ -1,0 +1,196 @@
+# CyberBlue Velociraptor Agent Installation Script for Windows
+# Generated for server: {{SERVER_IP}}
+# This script must be run as Administrator
+#
+# IMPORTANT: If you get an "execution policy" error, run one of these commands first:
+#   Option 1 (Recommended): Unblock-File .\install-windows.ps1
+#   Option 2: powershell -ExecutionPolicy Bypass -File .\install-windows.ps1
+#
+# Then run: .\install-windows.ps1
+
+#Requires -RunAsAdministrator
+
+$ErrorActionPreference = "Stop"
+
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "CyberBlue Velociraptor Agent Installer" -ForegroundColor Cyan
+Write-Host "Server: {{SERVER_IP}}:8000" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+
+# Configuration
+$VelociInstallDir = "$env:ProgramFiles\Velociraptor"
+$VelociExe = "$VelociInstallDir\velociraptor.exe"
+$VelociConfig = "$VelociInstallDir\client.config.yaml"
+$ServiceName = "Velociraptor"
+
+# Function to check if running as Administrator
+function Test-Administrator {
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($user)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+# Function to download file
+function Download-File {
+    param(
+        [string]$Url,
+        [string]$Output
+    )
+    
+    try {
+        Write-Host "[*] Downloading from: $Url" -ForegroundColor Yellow
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($Url, $Output)
+        
+        Write-Host "[✓] Download completed" -ForegroundColor Green
+        return $true
+    }
+    catch {
+        Write-Host "[✗] Download failed: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
+# Verify Administrator privileges
+if (-not (Test-Administrator)) {
+    Write-Host "[✗] ERROR: This script must be run as Administrator!" -ForegroundColor Red
+    Write-Host "[!] Right-click PowerShell and select 'Run as Administrator'" -ForegroundColor Yellow
+    pause
+    exit 1
+}
+
+Write-Host "[*] Step 1: Creating installation directory..." -ForegroundColor Cyan
+if (-not (Test-Path $VelociInstallDir)) {
+    New-Item -ItemType Directory -Path $VelociInstallDir -Force | Out-Null
+    Write-Host "[✓] Directory created: $VelociInstallDir" -ForegroundColor Green
+}
+else {
+    Write-Host "[!] Directory already exists" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "[*] Step 2: Downloading Velociraptor binary..." -ForegroundColor Cyan
+
+# Get latest release URL
+try {
+    $releasesUrl = "https://api.github.com/repos/Velocidex/velociraptor/releases/latest"
+    $release = Invoke-RestMethod -Uri $releasesUrl
+    $asset = $release.assets | Where-Object { $_.name -like "*windows-amd64.exe" } | Select-Object -First 1
+    
+    if ($asset) {
+        $downloadUrl = $asset.browser_download_url
+        Write-Host "[*] Latest version: $($release.tag_name)" -ForegroundColor Yellow
+        
+        if (Download-File -Url $downloadUrl -Output $VelociExe) {
+            Write-Host "[✓] Velociraptor binary downloaded" -ForegroundColor Green
+        }
+        else {
+            throw "Failed to download Velociraptor binary"
+        }
+    }
+    else {
+        throw "Could not find Windows binary in latest release"
+    }
+}
+catch {
+    Write-Host "[✗] Error downloading binary: $_" -ForegroundColor Red
+    Write-Host "[!] Please download manually from: https://github.com/Velocidex/velociraptor/releases" -ForegroundColor Yellow
+    pause
+    exit 1
+}
+
+Write-Host ""
+Write-Host "[*] Step 3: Creating client configuration..." -ForegroundColor Cyan
+
+# Save config to file (the config file should be in the same directory as this script)
+$configFile = Join-Path $PSScriptRoot "client.config.yaml"
+if (Test-Path $configFile) {
+    Copy-Item $configFile $VelociConfig -Force
+    Write-Host "[✓] Configuration file installed" -ForegroundColor Green
+}
+else {
+    Write-Host "[✗] ERROR: client.config.yaml not found!" -ForegroundColor Red
+    Write-Host "[!] Please ensure client.config.yaml is in the same directory as this script" -ForegroundColor Yellow
+    pause
+    exit 1
+}
+
+Write-Host ""
+Write-Host "[*] Step 4: Checking existing service..." -ForegroundColor Cyan
+
+# Stop and remove existing service if it exists
+$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($existingService) {
+    Write-Host "[!] Existing service found, stopping and removing..." -ForegroundColor Yellow
+    
+    if ($existingService.Status -eq 'Running') {
+        Stop-Service -Name $ServiceName -Force
+        Start-Sleep -Seconds 2
+    }
+    
+    & sc.exe delete $ServiceName
+    Start-Sleep -Seconds 2
+    Write-Host "[✓] Old service removed" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "[*] Step 5: Installing Velociraptor as Windows Service..." -ForegroundColor Cyan
+
+try {
+    # Install service using Velociraptor's built-in installer
+    $installArgs = "service install --config `"$VelociConfig`""
+    Start-Process -FilePath $VelociExe -ArgumentList $installArgs -Wait -NoNewWindow
+    
+    Write-Host "[✓] Service installed successfully" -ForegroundColor Green
+}
+catch {
+    Write-Host "[✗] Error installing service: $_" -ForegroundColor Red
+    pause
+    exit 1
+}
+
+Write-Host ""
+Write-Host "[*] Step 6: Starting Velociraptor service..." -ForegroundColor Cyan
+
+try {
+    Start-Service -Name $ServiceName
+    Start-Sleep -Seconds 3
+    
+    $service = Get-Service -Name $ServiceName
+    if ($service.Status -eq 'Running') {
+        Write-Host "[✓] Service started successfully!" -ForegroundColor Green
+    }
+    else {
+        Write-Host "[!] Service installed but not running. Check logs." -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Host "[✗] Error starting service: $_" -ForegroundColor Red
+    Write-Host "[!] Try starting manually: Start-Service $ServiceName" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host "Installation Complete!" -ForegroundColor Green
+Write-Host "========================================" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Installation Details:" -ForegroundColor White
+Write-Host "  • Server: {{SERVER_IP}}:8000" -ForegroundColor Gray
+Write-Host "  • Install Path: $VelociInstallDir" -ForegroundColor Gray
+Write-Host "  • Service Name: $ServiceName" -ForegroundColor Gray
+Write-Host "  • Config File: $VelociConfig" -ForegroundColor Gray
+Write-Host ""
+Write-Host "Verification Commands:" -ForegroundColor White
+Write-Host "  • Check service status: Get-Service $ServiceName" -ForegroundColor Gray
+Write-Host "  • View service logs: Get-EventLog -LogName Application -Source $ServiceName -Newest 20" -ForegroundColor Gray
+Write-Host "  • Restart service: Restart-Service $ServiceName" -ForegroundColor Gray
+Write-Host ""
+Write-Host "The agent should now appear in the Velociraptor server console." -ForegroundColor Green
+Write-Host "Log in to: https://{{SERVER_IP}}:7000" -ForegroundColor Green
+Write-Host ""
+
+pause
+

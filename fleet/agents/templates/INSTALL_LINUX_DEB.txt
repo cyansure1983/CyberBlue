@@ -1,0 +1,64 @@
+================================================================================
+  CyberBlue Fleet Osquery Agent - Linux (Ubuntu/Debian) Installation
+  Fleet Server: {{SERVER_IP}}:7007
+================================================================================
+
+REQUIREMENTS:
+  - Ubuntu 18.04+ or Debian 9+
+  - Root or sudo privileges
+  - Network access to {{SERVER_IP}}:7007
+  - Fleet enrollment secret (obtained from Fleet UI)
+
+BEFORE INSTALLATION - GET ENROLLMENT SECRET:
+  1. Access Fleet UI: http://{{SERVER_IP}}:7007
+  2. Login: admin / admin123
+  3. Go to: Settings → Organization Settings → Enroll Secret
+  4. Copy the enrollment secret
+
+INSTALLATION STEPS:
+
+1. Extract and install osquery:
+   
+   sudo dpkg -i osquery-ubuntu.deb
+
+2. Create enrollment secret file:
+   
+   echo "YOUR_ENROLLMENT_SECRET_HERE" | sudo tee /etc/osquery/secret.txt
+   sudo chmod 600 /etc/osquery/secret.txt
+
+3. Create Fleet configuration:
+   
+   sudo tee /etc/osquery/fleet.flags > /dev/null <<EOF
+--tls_hostname={{SERVER_IP}}:7007
+--enroll_secret_path=/etc/osquery/secret.txt
+--enroll_tls_endpoint=/api/osquery/enroll
+--config_plugin=tls
+--config_tls_endpoint=/api/osquery/config
+--config_refresh=60
+--distributed_plugin=tls
+--distributed_interval=10
+--distributed_tls_read_endpoint=/api/osquery/distributed/read
+--distributed_tls_write_endpoint=/api/osquery/distributed/write
+--logger_plugin=tls
+--logger_tls_endpoint=/api/osquery/log
+--host_identifier=hostname
+--tls_server_certs=/dev/null
+EOF
+
+4. Start osqueryd with Fleet:
+   
+   sudo osqueryd --flagfile=/etc/osquery/fleet.flags --daemonize
+
+VERIFICATION:
+  - Agent appears in Fleet UI within 1-2 minutes
+  - Access: http://{{SERVER_IP}}:7007 → Hosts
+  
+TROUBLESHOOTING:
+  - Check logs: sudo journalctl -u osqueryd -f
+  - Verify secret: cat /etc/osquery/secret.txt
+  - Test connectivity: curl http://{{SERVER_IP}}:7007
+
+================================================================================
+For support: Check CyberBlue or Fleet documentation
+================================================================================
+

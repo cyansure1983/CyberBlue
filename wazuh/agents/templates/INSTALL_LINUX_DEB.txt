@@ -1,0 +1,60 @@
+================================================================================
+  CyberBlue Wazuh Agent - Linux (Ubuntu/Debian) Installation Instructions
+  Manager Server: {{MANAGER_IP}}:1514
+================================================================================
+
+REQUIREMENTS:
+  - Ubuntu 18.04+ or Debian 9+ or compatible distribution
+  - Root or sudo privileges
+  - Network access to {{MANAGER_IP}}:1514
+
+INSTALLATION STEPS:
+
+1. Extract this package:
+   unzip wazuh-agent-ubuntu.zip
+   cd wazuh-agent-ubuntu
+
+2. Install Wazuh Agent:
+   sudo dpkg -i wazuh-agent-ubuntu.deb
+
+3. Configure Manager IP:
+   sudo cp ossec.conf /var/ossec/etc/ossec.conf
+   sudo chmod 640 /var/ossec/etc/ossec.conf
+   sudo chown root:wazuh /var/ossec/etc/ossec.conf
+
+4. Enable and Start Service:
+   sudo systemctl daemon-reload
+   sudo systemctl enable wazuh-agent
+   sudo systemctl start wazuh-agent
+
+5. Verify Service is Running:
+   sudo systemctl status wazuh-agent
+
+VERIFICATION:
+  - Agent should register with Wazuh manager within 1-2 minutes
+  - Access Wazuh Dashboard: https://{{MANAGER_IP}}:7001
+  - Default credentials: admin / SecretPassword
+  - Navigate to: Management → Agents
+  - Look for this computer's hostname
+
+TROUBLESHOOTING:
+  - Check service: sudo systemctl status wazuh-agent
+  - View logs: sudo tail -f /var/ossec/logs/ossec.log
+  - Restart service: sudo systemctl restart wazuh-agent
+  - Stop service: sudo systemctl stop wazuh-agent
+  - Uninstall: sudo apt remove --purge wazuh-agent
+
+FIREWALL:
+  - Ensure outbound TCP connections to {{MANAGER_IP}}:1514 are allowed
+  - Check firewall: sudo ufw status
+
+IMPORTANT NOTES:
+  - Agent name defaults to hostname
+  - Installation path: /var/ossec/
+  - Config file: /var/ossec/etc/ossec.conf
+  - Logs: /var/ossec/logs/
+
+================================================================================
+For support: Check CyberBlue documentation or Wazuh docs at docs.wazuh.com
+================================================================================
+

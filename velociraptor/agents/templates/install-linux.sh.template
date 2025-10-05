@@ -1,0 +1,272 @@
+#!/bin/bash
+# CyberBlue Velociraptor Agent Installation Script for Linux
+# Generated for server: {{SERVER_IP}}
+# This script must be run as root or with sudo
+
+set -e  # Exit on error
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Configuration
+SERVER_IP="{{SERVER_IP}}"
+INSTALL_DIR="/usr/local/bin"
+CONFIG_DIR="/etc/velociraptor"
+CONFIG_FILE="$CONFIG_DIR/client.config.yaml"
+SERVICE_NAME="velociraptor"
+VELOCI_BIN="$INSTALL_DIR/velociraptor"
+
+echo -e "${CYAN}========================================${NC}"
+echo -e "${CYAN}CyberBlue Velociraptor Agent Installer${NC}"
+echo -e "${CYAN}Server: ${SERVER_IP}:8000${NC}"
+echo -e "${CYAN}========================================${NC}"
+echo ""
+
+# Function to print colored messages
+print_status() {
+    echo -e "${CYAN}[*]${NC} $1"
+}
+
+print_success() {
+    echo -e "${GREEN}[✓]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[✗]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[!]${NC} $1"
+}
+
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   print_error "This script must be run as root or with sudo"
+   echo "Please run: sudo $0"
+   exit 1
+fi
+
+# Detect Linux distribution
+detect_distro() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS=$ID
+        VER=$VERSION_ID
+    else
+        OS=$(uname -s)
+        VER=$(uname -r)
+    fi
+    print_status "Detected OS: $OS $VER"
+}
+
+# Install dependencies
+install_dependencies() {
+    print_status "Installing dependencies..."
+    
+    if command -v apt-get &> /dev/null; then
+        apt-get update -qq
+        apt-get install -y curl wget ca-certificates > /dev/null 2>&1
+    elif command -v yum &> /dev/null; then
+        yum install -y curl wget ca-certificates > /dev/null 2>&1
+    elif command -v dnf &> /dev/null; then
+        dnf install -y curl wget ca-certificates > /dev/null 2>&1
+    else
+        print_warning "Could not detect package manager. Assuming curl and wget are installed."
+    fi
+    
+    print_success "Dependencies installed"
+}
+
+# Download Velociraptor binary
+download_velociraptor() {
+    print_status "Downloading Velociraptor binary..."
+    
+    # Get latest release URL
+    RELEASE_URL=$(curl -s https://api.github.com/repos/Velocidex/velociraptor/releases/latest | \
+                  grep "browser_download_url.*linux-amd64" | \
+                  cut -d '"' -f 4)
+    
+    if [ -z "$RELEASE_URL" ]; then
+        print_error "Could not find download URL"
+        exit 1
+    fi
+    
+    print_status "Downloading from: $RELEASE_URL"
+    
+    if curl -L -o /tmp/velociraptor "$RELEASE_URL"; then
+        chmod +x /tmp/velociraptor
+        mv /tmp/velociraptor "$VELOCI_BIN"
+        print_success "Binary downloaded and installed to $VELOCI_BIN"
+    else
+        print_error "Failed to download Velociraptor"
+        exit 1
+    fi
+}
+
+# Create configuration directory and file
+install_config() {
+    print_status "Installing configuration..."
+    
+    # Create config directory
+    mkdir -p "$CONFIG_DIR"
+    
+    # Check if config file exists in current directory
+    if [ -f "./client.config.yaml" ]; then
+        cp "./client.config.yaml" "$CONFIG_FILE"
+        chmod 600 "$CONFIG_FILE"
+        print_success "Configuration installed to $CONFIG_FILE"
+    else
+        print_error "client.config.yaml not found in current directory!"
+        print_warning "Please ensure client.config.yaml is in the same directory as this script"
+        exit 1
+    fi
+}
+
+# Create systemd service
+create_systemd_service() {
+    print_status "Creating systemd service..."
+    
+    cat > /etc/systemd/system/${SERVICE_NAME}.service <<EOF
+[Unit]
+Description=Velociraptor Agent for CyberBlue
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=${VELOCI_BIN} --config ${CONFIG_FILE} client
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=velociraptor
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    chmod 644 /etc/systemd/system/${SERVICE_NAME}.service
+    print_success "Systemd service created"
+}
+
+# Stop existing service if running
+stop_existing_service() {
+    if systemctl is-active --quiet ${SERVICE_NAME}; then
+        print_status "Stopping existing service..."
+        systemctl stop ${SERVICE_NAME}
+        print_success "Service stopped"
+    fi
+}
+
+# Start and enable service
+start_service() {
+    print_status "Starting Velociraptor service..."
+    
+    systemctl daemon-reload
+    systemctl enable ${SERVICE_NAME}
+    systemctl start ${SERVICE_NAME}
+    
+    sleep 2
+    
+    if systemctl is-active --quiet ${SERVICE_NAME}; then
+        print_success "Service started successfully!"
+    else
+        print_warning "Service may not be running. Check logs with: journalctl -u ${SERVICE_NAME} -f"
+    fi
+}
+
+# Verify installation
+verify_installation() {
+    print_status "Verifying installation..."
+    
+    if [ -f "$VELOCI_BIN" ]; then
+        print_success "Binary installed: $VELOCI_BIN"
+    else
+        print_error "Binary not found!"
+        return 1
+    fi
+    
+    if [ -f "$CONFIG_FILE" ]; then
+        print_success "Config installed: $CONFIG_FILE"
+    else
+        print_error "Config not found!"
+        return 1
+    fi
+    
+    if systemctl is-enabled --quiet ${SERVICE_NAME}; then
+        print_success "Service enabled"
+    else
+        print_warning "Service not enabled"
+    fi
+    
+    if systemctl is-active --quiet ${SERVICE_NAME}; then
+        print_success "Service is running"
+    else
+        print_error "Service is not running"
+        return 1
+    fi
+}
+
+# Main installation flow
+main() {
+    detect_distro
+    echo ""
+    
+    print_status "Step 1: Installing dependencies..."
+    install_dependencies
+    echo ""
+    
+    print_status "Step 2: Downloading Velociraptor..."
+    download_velociraptor
+    echo ""
+    
+    print_status "Step 3: Installing configuration..."
+    install_config
+    echo ""
+    
+    print_status "Step 4: Stopping existing service (if any)..."
+    stop_existing_service
+    echo ""
+    
+    print_status "Step 5: Creating systemd service..."
+    create_systemd_service
+    echo ""
+    
+    print_status "Step 6: Starting service..."
+    start_service
+    echo ""
+    
+    print_status "Step 7: Verifying installation..."
+    verify_installation
+    echo ""
+    
+    echo -e "${CYAN}========================================${NC}"
+    echo -e "${GREEN}Installation Complete!${NC}"
+    echo -e "${CYAN}========================================${NC}"
+    echo ""
+    echo -e "Installation Details:"
+    echo -e "  • Server: ${SERVER_IP}:8000"
+    echo -e "  • Binary: $VELOCI_BIN"
+    echo -e "  • Config: $CONFIG_FILE"
+    echo -e "  • Service: $SERVICE_NAME"
+    echo ""
+    echo -e "Useful Commands:"
+    echo -e "  • Check status:   systemctl status $SERVICE_NAME"
+    echo -e "  • View logs:      journalctl -u $SERVICE_NAME -f"
+    echo -e "  • Restart:        systemctl restart $SERVICE_NAME"
+    echo -e "  • Stop:           systemctl stop $SERVICE_NAME"
+    echo ""
+    echo -e "${GREEN}The agent should now appear in the Velociraptor server console.${NC}"
+    echo -e "${GREEN}Log in to: https://${SERVER_IP}:7000${NC}"
+    echo ""
+}
+
+# Run main function
+main
+
+exit 0
+

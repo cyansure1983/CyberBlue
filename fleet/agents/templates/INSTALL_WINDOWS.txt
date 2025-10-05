@@ -1,0 +1,66 @@
+================================================================================
+  CyberBlue Fleet Osquery Agent - Windows Installation Instructions
+  Fleet Server: {{SERVER_IP}}:7007
+================================================================================
+
+REQUIREMENTS:
+  - Windows 10/11 or Server 2016+
+  - Administrator privileges
+  - Network access to {{SERVER_IP}}:7007
+  - Fleet enrollment secret (obtained from Fleet UI)
+
+✅ ENROLLMENT SECRET INCLUDED - No manual configuration needed!
+
+INSTALLATION STEPS:
+
+1. Extract ZIP to C:\Fleet
+
+2. Install Osquery (PowerShell as Administrator):
+   
+   msiexec /i osquery-windows.msi /quiet /norestart
+
+3. Copy Pre-configured Files:
+   
+   Copy-Item secret.txt "C:\Program Files\osquery\secret.txt"
+   Copy-Item fleet-config.flags "C:\Program Files\osquery\fleet.flags"
+
+4. Remove Old Service (if exists):
+   
+   & "C:\Program Files\osquery\osqueryd\osqueryd.exe" --uninstall
+   
+   (Ignore errors if service doesn't exist)
+
+5. Install as Windows Service:
+   
+   & "C:\Program Files\osquery\osqueryd\osqueryd.exe" --install --flagfile="C:\Program Files\osquery\fleet.flags"
+
+6. Start Service:
+   
+   Start-Service osqueryd
+
+7. Verify Service is Running:
+   
+   Get-Service osqueryd
+
+VERIFICATION:
+  - Agent should appear in Fleet UI within 1-2 minutes
+  - Access Fleet: http://{{SERVER_IP}}:7007
+  - Navigate to: Hosts
+  - Look for this computer's hostname
+
+TROUBLESHOOTING:
+  - Check logs: C:\Program Files\osquery\log\
+  - Verify enrollment secret is correct
+  - Ensure network connectivity to {{SERVER_IP}}:7007
+  - Check Windows Firewall allows outbound to port 7007
+
+IMPORTANT NOTES:
+  - Fleet uses osquery for endpoint visibility
+  - Enrollment secret is required (get from Fleet UI)
+  - Agent name defaults to hostname
+  - TLS certificate verification is disabled for lab use
+
+================================================================================
+For support: Check CyberBlue documentation or Fleet docs at fleetdm.com/docs
+================================================================================
+

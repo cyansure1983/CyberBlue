@@ -1,0 +1,75 @@
+================================================================================
+  CyberBlue Velociraptor Agent - Linux Installation Instructions
+  Server: {{SERVER_IP}}:8000
+================================================================================
+
+REQUIREMENTS:
+  - Ubuntu/Debian/CentOS/RHEL or compatible Linux distribution
+  - Root or sudo privileges
+  - Network access to {{SERVER_IP}}:8000
+
+INSTALLATION STEPS:
+
+1. Extract this package:
+   unzip velociraptor-agent-linux.zip
+   cd velociraptor-agent-linux
+
+2. Move binary to system path:
+   sudo mv velociraptor-linux /usr/local/bin/velociraptor
+   sudo chmod +x /usr/local/bin/velociraptor
+
+3. Create configuration directory:
+   sudo mkdir -p /etc/velociraptor
+
+4. Move configuration file:
+   sudo mv client.config.yaml /etc/velociraptor/
+   sudo chmod 600 /etc/velociraptor/client.config.yaml
+
+5. Create systemd service:
+   sudo tee /etc/systemd/system/velociraptor.service > /dev/null <<EOF
+[Unit]
+Description=Velociraptor Agent for CyberBlue
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/velociraptor --config /etc/velociraptor/client.config.yaml client
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+6. Enable and start the service:
+   sudo systemctl daemon-reload
+   sudo systemctl enable velociraptor
+   sudo systemctl start velociraptor
+
+7. Verify the service is running:
+   sudo systemctl status velociraptor
+
+VERIFICATION:
+  - The agent should appear in Velociraptor server within 1-2 minutes
+  - Access server GUI: https://{{SERVER_IP}}:7000
+  - Default credentials: admin / cyberblue
+  - Look for this computer's hostname in the Client list
+
+TROUBLESHOOTING:
+  - Check service status: sudo systemctl status velociraptor
+  - View logs: sudo journalctl -u velociraptor -f
+  - Restart service: sudo systemctl restart velociraptor
+  - Stop service: sudo systemctl stop velociraptor
+  - Disable: sudo systemctl disable velociraptor
+
+FIREWALL:
+  - Ensure outbound connections to {{SERVER_IP}}:8000 are allowed
+  - Check firewall: sudo ufw status
+
+================================================================================
+For support: Check CyberBlue documentation or Velociraptor docs
+================================================================================
+
