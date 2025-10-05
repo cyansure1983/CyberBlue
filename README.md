@@ -144,7 +144,7 @@ CyberBlue transforms Blue Team cybersecurity tool deployment into a **like one-c
 
 ### 📋 System Requirements
 - **RAM**: 16+ GB recommended (8GB minimum)
-- **Storage**: 100GB+ free disk space
+- **Storage**: 150GB+ free disk space
 - **OS**: Ubuntu 22.04+ LTS (tested on 22.04.5 & 24.04.2) Ubuntu x86_64 (AMD/Intel)
 - **Network**: Internet connection for downloads
 
