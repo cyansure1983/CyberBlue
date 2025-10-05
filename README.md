@@ -154,9 +154,9 @@ CyberBlue transforms Blue Team cybersecurity tool deployment into a **like one-c
 
 ```bash
 # Clone and install CyberBlue SOC
-git clone https://github.com/CyberBlue0/CyberBlue.git
-cd CyberBlue
-chmod +x cyberblue_install.sh 
+git clone https://github.com/CyberBlu3s/CyberBlueSOC.git
+cd CyberBlueSOC
+chmod +x cyberblue_install.sh
 ./cyberblue_install.sh
 ```
 
