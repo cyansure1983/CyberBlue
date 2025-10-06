@@ -19,8 +19,6 @@
 
 ### **🔴 CRITICAL WARNINGS - READ BEFORE INSTALLING:**
 
-- **🔴 Default Credentials** - This platform uses default credentials, test configurations, and is NOT security-hardened
-- **🔴 EDUCATIONAL ONLY** - Designed exclusively for cybersecurity training, research, and hands-on learning
 - **🔴 NO SECURITY GUARANTEES** - No warranties, not suitable for processing real sensitive data or monitoring production systems
 - **🔴 DEFAULT CREDENTIALS** - All tools use well-known default passwords (admin/cyberblue, etc.)
 - **🔴 NO AUTHENTICATION** - Portal has authentication removed for ease of lab access
