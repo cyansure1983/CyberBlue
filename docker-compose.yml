@@ -87,7 +87,6 @@ services:
       - ./suricata/rules:/etc/suricata/rules
       - ./suricata/classification.config:/etc/suricata/classification.config
       - ./suricata/reference.config:/etc/suricata/reference.config
-      - ./suricata/logs:/var/log/suricata
       - /etc/localtime:/etc/localtime:ro
     command: suricata -c /etc/suricata/suricata.yaml -i ${SURICATA_INT}
     restart: always
