@@ -34,7 +34,51 @@ done
 
 ## 🚨 **Common Issues & Solutions**
 
-### 1. **Container Start Failures**
+### 1. **Docker Compose Version Compatibility**
+
+#### Issue: "docker-compose up -d fails with version errors"
+**Symptoms:**
+- `docker-compose up -d` command fails
+- Docker Compose version compatibility errors
+- Commands not recognized
+- Installation script exits with compose errors
+
+**Diagnosis:**
+```bash
+# Check Docker Compose version
+docker-compose --version
+docker compose version
+
+# Check if V2 plugin is installed
+docker compose version 2>/dev/null && echo "V2 installed" || echo "V2 missing"
+
+**Solutions:**
+1. **Install Docker Compose V2 Plugin (Recommended):**
+   ```bash
+   # Increase virtual memory for Elasticsearch/OpenSearch
+   sudo sysctl -w vm.max_map_count=262144
+   echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+   ```
+
+2. **Update Standalone Binary (Alternative):**
+   ```bash
+   # Fix file permissions
+   sudo chown -R $USER:docker ./configs
+   sudo chmod -R 755 ./configs
+   ```
+   
+**After Installing/Updating:**
+   ```bash
+   # Retry CyberBlueSOC installation
+   ./cyberblue_install.sh
+   ```
+   
+Note: Docker Compose V2 uses docker compose (space), V1 uses docker-compose (hyphen). Both can coexist safely.
+Credit: Thanks to the community for reporting and providing solutions! 
+
+Credit: Thanks to the community [@ljamel](https://github.com/ljamel) for reporting and providing solutions!
+
+### 2. **Container Start Failures**
 
 #### Issue: "Container exits immediately"
 **Symptoms:**
@@ -77,7 +121,7 @@ df -h
    sudo kill -9 [PID]
    ```
 
-### 2. **Portal Access Issues**
+### 3. **Portal Access Issues**
 
 #### Issue: "Portal not accessible on port 5500"
 **Symptoms:**
@@ -119,7 +163,7 @@ sudo ufw status
    grep -E "HOST_IP|PORTAL_PORT" .env
    ```
 
-### 3. **Wazuh Issues**
+### 4. **Wazuh Issues**
 
 #### Issue: "Wazuh dashboard not loading"
 **Symptoms:**
@@ -169,7 +213,7 @@ curl -k https://localhost:55000/
    docker-compose up -d wazuh.indexer wazuh.manager wazuh.dashboard
    ```
 
-### 4. **MISP Configuration Issues**
+### 5. **MISP Configuration Issues**
 
 #### Issue: "MISP showing database connection errors"
 **Symptoms:**
@@ -209,7 +253,7 @@ docker logs misp-db
    sudo chown -R 33:33 ./files
    ```
 
-### 5. **Velociraptor Connection Issues**
+### 6. **Velociraptor Connection Issues**
 
 #### Issue: "Cannot access Velociraptor GUI"
 **Symptoms:**
@@ -233,7 +277,7 @@ docker logs misp-db
    docker-compose restart velociraptor
    ```
 
-### 6. **Suricata Interface Issues**
+### 7. **Suricata Interface Issues**
 
 #### Issue: "Suricata not capturing traffic"
 **Symptoms:**
