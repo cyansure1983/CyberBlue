@@ -135,6 +135,14 @@ CyberBlue transforms Blue Team cybersecurity tool deployment into a **like one-c
 
 **Fully automated** - MISP populates automatically during installation!
 
+### ⚡ Quick Update — Force-Refresh MISP Feeds
+
+1) Log in to your MISP web UI as **admin** and set the password (if it’s your first login).  
+2) From the repository root, run:
+
+```bash
+bash misp/configure-threat-feeds.sh
+```
 ---
 
 ## 🚀 Quick Start
