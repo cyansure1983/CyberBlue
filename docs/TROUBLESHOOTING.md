@@ -55,16 +55,26 @@ docker compose version 2>/dev/null && echo "V2 installed" || echo "V2 missing"
 **Solutions:**
 1. **Install Docker Compose V2 Plugin (Recommended):**
    ```bash
-   # Increase virtual memory for Elasticsearch/OpenSearch
-   sudo sysctl -w vm.max_map_count=262144
-   echo 'vm.max_map_count=262144' | sudo tee -a /etc/sysctl.conf
+   # Update package list
+   sudo apt-get update
+   
+   # Install Docker Compose V2 plugin
+   sudo apt-get install -y docker-compose-plugin
+   
+   # Verify installation
+   docker compose version
    ```
 
 2. **Update Standalone Binary (Alternative):**
    ```bash
-   # Fix file permissions
-   sudo chown -R $USER:docker ./configs
-   sudo chmod -R 755 ./configs
+   # Download latest Docker Compose binary
+   sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+   
+   # Make executable
+   sudo chmod +x /usr/local/bin/docker-compose
+   
+   # Verify version
+   docker-compose --version
    ```
    
 **After Installing/Updating:**
@@ -73,10 +83,9 @@ docker compose version 2>/dev/null && echo "V2 installed" || echo "V2 missing"
    ./cyberblue_install.sh
    ```
    
-Note: Docker Compose V2 uses docker compose (space), V1 uses docker-compose (hyphen). Both can coexist safely.
-Credit: Thanks to the community for reporting and providing solutions! 
+**Note:** Docker Compose V2 uses docker compose (space), V1 uses docker-compose (hyphen). Both can coexist safely.
 
-Credit: Thanks to the community [@ljamel](https://github.com/ljamel) for reporting and providing solutions!
+**Credit:** Thanks to the community [@ljamel](https://github.com/ljamel) for reporting and providing solutions!
 
 ### 2. **Container Start Failures**
 
