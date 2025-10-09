@@ -51,7 +51,7 @@ docker compose version
 
 # Check if V2 plugin is installed
 docker compose version 2>/dev/null && echo "V2 installed" || echo "V2 missing"
-
+```
 **Solutions:**
 1. **Install Docker Compose V2 Plugin (Recommended):**
    ```bash
