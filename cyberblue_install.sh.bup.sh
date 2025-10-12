@@ -14,7 +14,7 @@
 # ✅ Automatic prerequisite detection and installation
 # ✅ Full Docker and Docker Compose setup
 # ✅ Complete CyberBlue SOC platform deployment
-# ✅ Works on AWS, VMware, VirtualBox, bare metal
+# ✅ Works on AWS, Azure, GCP, VMware, VirtualBox, bare metal
 # ============================================================================
 
 set -e  # Exit on error
@@ -523,6 +523,28 @@ if [ ! -f .env ]; then
     touch .env
 fi
 
+# CRITICAL: Set ADMIN_KEY FIRST (required for MISP admin auto-creation!)
+# Remove any existing ADMIN_KEY lines (empty or otherwise)
+sed -i '/^ADMIN_KEY=/d' .env 2>/dev/null || true
+# Add with value
+echo "ADMIN_KEY=cyberblue-auto-generated-admin-key" >> .env
+echo -e "${CYAN}   [ENV]${NC} ADMIN_KEY=cyberblue-auto-generated-admin-key (MISP admin auto-creation)"
+
+# Set ADMIN_EMAIL
+sed -i '/^ADMIN_EMAIL=/d' .env 2>/dev/null || true
+echo "ADMIN_EMAIL=admin@admin.test" >> .env
+echo -e "${CYAN}   [ENV]${NC} ADMIN_EMAIL=admin@admin.test"
+
+# Set ADMIN_PASSWORD
+sed -i '/^ADMIN_PASSWORD=/d' .env 2>/dev/null || true
+echo "ADMIN_PASSWORD=admin" >> .env
+echo -e "${CYAN}   [ENV]${NC} ADMIN_PASSWORD=admin"
+
+# Disable background updates (faster admin creation)
+sed -i '/^ENABLE_BACKGROUND_UPDATES=/d' .env 2>/dev/null || true
+echo "ENABLE_BACKGROUND_UPDATES=false" >> .env
+echo -e "${CYAN}   [ENV]${NC} ENABLE_BACKGROUND_UPDATES=false (speeds up by 4-5 min)"
+
 # Update .env
 if grep -q "^MISP_BASE_URL=" .env; then
     sed -i "s|^MISP_BASE_URL=.*|MISP_BASE_URL=${MISP_URL}|" .env
@@ -570,6 +592,17 @@ if ! grep -q "^ADMIN_PASSWORD=" .env; then
     echo "ADMIN_PASSWORD=admin" >> .env
     echo -e "${CYAN}   [ENV]${NC} Set ADMIN_PASSWORD=admin"
 fi
+
+# Disable MISP background updates during installation (speeds up admin user creation by 4-5 min!)
+# Templates will be updated in background AFTER installation completes
+if ! grep -q "^ENABLE_BACKGROUND_UPDATES=" .env; then
+    echo "ENABLE_BACKGROUND_UPDATES=false" >> .env
+    echo -e "${CYAN}   [ENV]${NC} Disabled MISP background updates during install (4-5 min faster)"
+elif grep -q "^ENABLE_BACKGROUND_UPDATES=$" .env || grep -q "^ENABLE_BACKGROUND_UPDATES=true" .env; then
+    sed -i 's/^ENABLE_BACKGROUND_UPDATES=.*/ENABLE_BACKGROUND_UPDATES=false/' .env
+    echo -e "${CYAN}   [ENV]${NC} Disabled MISP background updates during install (4-5 min faster)"
+fi
+echo -e "${CYAN}   [INFO]${NC} Templates will auto-update after installation completes"
 
 # Prepare YETI directory
 sudo mkdir -p /opt/yeti/bloomfilters
@@ -1106,12 +1139,34 @@ while [ $ELAPSED -lt $MAX_WAIT ]; do
         break
     fi
     
-    # Show live activity from MISP
-    LATEST_LOG=$(sudo docker logs misp-core 2>&1 | tail -1 | cut -c1-80)
+    # Show live activity from MISP with better context
+    LATEST_LOG=$(sudo docker logs misp-core 2>&1 | tail -3 | grep -v "^$" | tail -1 | cut -c1-60)
     MISP_TABLES=$(sudo docker exec misp-core mysql -h db -u misp -pexample misp \
         -se "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='misp';" 2>/dev/null || echo "0")
     
-    printf "\r${CYAN}         [%03ds] Tables: %3d | %s${NC}" $ELAPSED "$MISP_TABLES" "$LATEST_LOG"
+    # Determine what MISP is doing based on activity
+    ACTIVITY="Initializing..."
+    if echo "$LATEST_LOG" | grep -q "database"; then
+        ACTIVITY="Setting up database"
+    elif echo "$LATEST_LOG" | grep -q "schema\|table\|migration"; then
+        ACTIVITY="Creating database schema"
+    elif echo "$LATEST_LOG" | grep -q "template"; then
+        ACTIVITY="Updating templates"
+    elif echo "$LATEST_LOG" | grep -q "admin\|user"; then
+        ACTIVITY="Creating admin user"
+    elif echo "$LATEST_LOG" | grep -q "worker\|job"; then
+        ACTIVITY="Starting background workers"
+    elif echo "$LATEST_LOG" | grep -q "nginx\|php"; then
+        ACTIVITY="Starting web services"
+    elif [ "$MISP_TABLES" -lt "50" ]; then
+        ACTIVITY="Importing database schema"
+    elif [ "$MISP_TABLES" -lt "100" ]; then
+        ACTIVITY="Creating tables & indexes"
+    else
+        ACTIVITY="Finalizing initialization"
+    fi
+    
+    printf "\r${CYAN}         [%03ds] %s (Tables: %d)                    ${NC}" $ELAPSED "$ACTIVITY" "$MISP_TABLES"
     sleep 5
     ELAPSED=$((ELAPSED + 5))
 done
@@ -1137,12 +1192,31 @@ while [ $USER_WAIT -lt $MAX_USER_WAIT ]; do
         break
     fi
     
-    # Show MISP activity
-    LATEST_LOG=$(sudo docker logs misp-core 2>&1 | tail -1 | cut -c1-70)
+    # Show MISP activity with meaningful context
+    LATEST_LOGS=$(sudo docker logs misp-core 2>&1 | tail -5 | grep -v "^$")
     MISP_USERS=$(sudo docker exec misp-core mysql -h db -u misp -pexample misp \
         -se "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
     
-    printf "\r${CYAN}         [%03ds] Users: %d | %s${NC}" $USER_WAIT "$MISP_USERS" "$LATEST_LOG"
+    # Parse what MISP is doing
+    CURRENT_ACTIVITY="Initializing..."
+    if echo "$LATEST_LOGS" | grep -q "Successfully updated.*object"; then
+        OBJ_COUNT=$(echo "$LATEST_LOGS" | grep "object" | tail -1 | grep -oP '\d+' | tail -1)
+        CURRENT_ACTIVITY="Updating object templates ($OBJ_COUNT/363)"
+    elif echo "$LATEST_LOGS" | grep -q "database.*init\|Importing"; then
+        CURRENT_ACTIVITY="Importing database schema"
+    elif echo "$LATEST_LOGS" | grep -q "migration"; then
+        CURRENT_ACTIVITY="Running database migrations"
+    elif echo "$LATEST_LOGS" | grep -q "Creating.*admin\|user.*init"; then
+        CURRENT_ACTIVITY="Creating admin user"
+    elif echo "$LATEST_LOGS" | grep -q "Starting.*worker"; then
+        CURRENT_ACTIVITY="Starting background workers"
+    elif echo "$LATEST_LOGS" | grep -q "taxonomy\|galaxies"; then
+        CURRENT_ACTIVITY="Loading taxonomies/galaxies"
+    elif [ "$MISP_USERS" -eq "0" ]; then
+        CURRENT_ACTIVITY="Waiting for user initialization"
+    fi
+    
+    printf "\r${CYAN}         [%03ds] %s                              ${NC}" $USER_WAIT "$CURRENT_ACTIVITY"
     sleep 5
     USER_WAIT=$((USER_WAIT + 5))
 done
