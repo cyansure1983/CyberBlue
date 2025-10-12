@@ -483,7 +483,7 @@ services:
     image: mysql:8.0
     container_name: fleet-mysql
     restart: always
-    command: --innodb-buffer-pool-size=512M --innodb-flush-log-at-trx-commit=2 --skip-log-bin
+    command: --innodb-buffer-pool-size=1024M --innodb-flush-log-at-trx-commit=2 --skip-log-bin --innodb-log-file-size=256M --innodb-log-buffer-size=64M
     environment:
       MYSQL_ROOT_PASSWORD: fleetroot
       MYSQL_DATABASE: fleet
