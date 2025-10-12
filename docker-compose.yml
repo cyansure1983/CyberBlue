@@ -777,27 +777,6 @@ services:
     depends_on:
       - opensearch-init
 
-  openvas:
-    image: immauss/openvas:latest
-    container_name: openvas
-    hostname: openvas
-    network_mode: "host"
-    environment:
-      - SKIPSYNC=true
-      - PASSWORD=cyberblue
-      - TZ=Asia/Riyadh
-      - GSAD_ARGS=--port=7014
-    volumes:
-      - ./openvas/data:/var/lib/openvas
-      - ./openvas/logs:/var/log/openvas
-    restart: unless-stopped
-    privileged: true
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    security_opt:
-      - seccomp:unconfined
-
   caldera:
     build:
       context: ./caldera
