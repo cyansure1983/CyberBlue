@@ -1,0 +1,851 @@
+services:
+  portal:
+    build:
+      context: ./portal
+      dockerfile: Dockerfile
+    container_name: cyber-blue-portal
+    ports:
+      - "5500:5500"
+      - "5443:5443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portal/logs:/app/logs
+      - ./portal/ssl:/app/ssl:ro
+      - ./velociraptor:/velociraptor
+      - ./wazuh/agents:/wazuh/agents
+      - ./fleet/agents:/fleet/agents
+      - ./caldera/agents:/caldera/agents
+      - /opt/yara-rules:/opt/yara-rules
+      - /opt/sigma-rules:/opt/sigma-rules
+      - /var/log:/var/log
+    environment:
+      - PORT=5500
+      - HTTPS_PORT=5443
+      - FLASK_ENV=production
+      - HOST_IP=${HOST_IP}
+      - CYBERBLUE_INSTALL_DIR=${CYBERBLUE_INSTALL_DIR:-/home/ubuntu/CyberBlue}
+      - CYBERBLUE_INSTALL_USER=${CYBERBLUE_INSTALL_USER:-ubuntu}
+      - ENABLE_HTTPS=true
+      - SSL_CERT_PATH=/app/ssl/cert.pem
+      - SSL_KEY_PATH=/app/ssl/key.pem
+      - SECRET_KEY=cyberblue-secure-secret-key-change-in-production
+      - ADMIN_PASSWORD=cyberblue123
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  portainer:
+    container_name: portainer
+    image: portainer/portainer-ce:latest
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+      - "8001:8000" # Changed to avoid conflict with Velociraptor
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - cyber-blue
+
+  mitre-navigator:
+    build:
+      context: ./attack-navigator
+      dockerfile: Dockerfile
+    container_name: mitre-navigator
+    ports:
+      - "7013:4200"
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  wireshark:
+    image: lscr.io/linuxserver/wireshark:latest
+    container_name: wireshark
+    cap_add:
+      - NET_ADMIN
+    network_mode: host
+    environment:
+      - CUSTOM_USER=admin
+      - PASSWORD=cyberblue
+      - CUSTOM_PORT=7098 # Change HTTP port
+      - CUSTOM_HTTPS_PORT=7099 # Optional: HTTPS port if needed
+    volumes:
+      - ./wireshark/config:/config
+    ports:
+      - "7099:3001" # HTTPS 
+    restart: unless-stopped
+    privileged: true
+
+  suricata:
+    image: stamus/suricata:latest
+    container_name: suricata
+    network_mode: "host" # Use only if you want to sniff actual host traffic
+    volumes:
+      - ./suricata:/etc/suricata
+      - ./suricata/logs:/var/log/suricata
+      - ./suricata/suricata.yaml:/etc/suricata/suricata.yaml
+      - ./suricata/rules:/etc/suricata/rules
+      - ./suricata/classification.config:/etc/suricata/classification.config
+      - ./suricata/reference.config:/etc/suricata/reference.config
+      - /etc/localtime:/etc/localtime:ro
+    command: suricata -c /etc/suricata/suricata.yaml -i ${SURICATA_INT}
+    restart: always
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    privileged: true
+
+  evebox:
+    image: jasonish/evebox
+    container_name: evebox
+    command:
+      - evebox
+      - server
+      - --no-auth
+      - --datastore
+      - sqlite
+      - --input
+      - /var/log/suricata/eve.json
+    ports:
+      - "7015:5636"
+    volumes:
+      - ./suricata/logs:/var/log/suricata:ro
+    restart: always
+    networks:
+      - cyber-blue
+
+  velociraptor:
+    build: ./velociraptor
+    container_name: velociraptor
+    ports:
+      - "7000:8889" # External port 7000 mapped to GUI port 8889
+      - "8000:8000" # Agent communication port (Frontend)
+    volumes:
+      - ./velociraptor:/velociraptor
+    restart: unless-stopped
+    environment:
+      - VEL_USER=${VEL_USER}
+      - VEL_PASSWORD=${VEL_PASSWORD}
+    networks:
+      - cyber-blue
+
+  ######MISP#######
+  # This is capable to relay via gmail, Amazon SES, or generic relays
+  # See: https://hub.docker.com/r/ixdotai/smtp
+  mail:
+    image: ixdotai/smtp
+    container_name: misp-mail
+    restart: unless-stopped
+    environment:
+      - "SMARTHOST_ADDRESS=${SMARTHOST_ADDRESS}"
+      - "SMARTHOST_PORT=${SMARTHOST_PORT}"
+      - "SMARTHOST_USER=${SMARTHOST_USER}"
+      - "SMARTHOST_PASSWORD=${SMARTHOST_PASSWORD}"
+      - "SMARTHOST_ALIASES=${SMARTHOST_ALIASES}"
+    networks:
+      - cyber-blue
+
+  redis:
+    image: valkey/valkey:7.2
+    container_name: misp-redis
+    restart: unless-stopped
+    command: "--requirepass '${REDIS_PASSWORD:-redispassword}'"
+    healthcheck:
+      test: "valkey-cli -a '${REDIS_PASSWORD:-redispassword}' -p ${REDIS_PORT:-6379} ping | grep -q PONG || exit 1"
+      interval: 2s
+      timeout: 1s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cyber-blue
+
+  db:
+    # We use MariaDB because it supports ARM and has the expected collations
+    image: mariadb:10.11
+    container_name: misp-db
+    restart: always
+    environment:
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_PASSWORD=${MYSQL_PASSWORD:-example}"
+      - "MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-password}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+    command: "--innodb-buffer-pool-size=${INNODB_BUFFER_POOL_SIZE:-2048M} --innodb-change-buffering=${INNODB_CHANGE_BUFFERING:-none} --innodb-io-capacity=${INNODB_IO_CAPACITY:-1000} --innodb-io-capacity-max=${INNODB_IO_CAPACITY_MAX:-2000} --innodb-log-file-size=${INNODB_LOG_FILE_SIZE:-600M} --innodb-read-io-threads=${INNODB_READ_IO_THREADS:-16} --innodb-stats-persistent=${INNODB_STATS_PERSISTENT:-ON} --innodb-write-io-threads=${INNODB_WRITE_IO_THREADS:-4}"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    cap_add:
+      - SYS_NICE # CAP_SYS_NICE Prevent runaway mysql log
+    healthcheck:
+      test: mysqladmin --user=$$MYSQL_USER --password=$$MYSQL_PASSWORD status
+      interval: 2s
+      timeout: 1s
+      retries: 3
+      start_period: 30s
+    networks:
+      - cyber-blue
+
+  misp-core:
+    image: ghcr.io/misp/misp-docker/misp-core:${CORE_RUNNING_TAG:-latest}
+    container_name: misp-core
+    cap_add:
+      - AUDIT_WRITE
+    build:
+      context: misp/core/.
+      args:
+        - CORE_TAG=${CORE_TAG:?Missing .env file, see README.md for instructions}
+        - CORE_COMMIT=${CORE_COMMIT}
+        - CORE_FLAVOR=${CORE_FLAVOR:-full}
+        - PHP_VER=${PHP_VER:?Missing .env file, see README.md for instructions}
+        - PYPI_REDIS_VERSION=${PYPI_REDIS_VERSION}
+        - PYPI_LIEF_VERSION=${PYPI_LIEF_VERSION}
+        - PYPI_PYDEEP2_VERSION=${PYPI_PYDEEP2_VERSION}
+        - PYPI_PYTHON_MAGIC_VERSION=${PYPI_PYTHON_MAGIC_VERSION}
+        - PYPI_MISP_LIB_STIX2_VERSION=${PYPI_MISP_LIB_STIX2_VERSION}
+        - PYPI_MAEC_VERSION=${PYPI_MAEC_VERSION}
+        - PYPI_MIXBOX_VERSION=${PYPI_MIXBOX_VERSION}
+        - PYPI_CYBOX_VERSION=${PYPI_CYBOX_VERSION}
+        - PYPI_PYMISP_VERSION=${PYPI_PYMISP_VERSION}
+        - PYPI_MISP_STIX_VERSION=${PYPI_MISP_STIX_VERSION}
+        - PYPI_SETUPTOOLS=${PYPI_SETUPTOOLS}
+        - PYPI_SUPERVISOR=${PYPI_SUPERVISOR}
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      misp-modules:
+        condition: service_healthy
+    healthcheck:
+      test: curl -ks ${MISP_BASE_URL:-https://localhost}/users/heartbeat > /dev/null || exit 1
+      interval: 2s
+      timeout: 1s
+      retries: 3
+      start_period: 30s
+    ports:
+      - "7003:443"
+    volumes:
+      - "./configs/:/var/www/MISP/app/Config/"
+      - "./logs/:/var/www/MISP/app/tmp/logs/"
+      - "./files/:/var/www/MISP/app/files/"
+      - "./ssl/:/etc/nginx/certs/"
+      - "./gnupg/:/var/www/MISP/.gnupg/"
+      # customize by replacing ${CUSTOM_PATH} with a path containing 'files/customize_misp.sh'
+      # - "${CUSTOM_PATH}/:/custom/"
+      # mount custom ca root certificates
+      # - "./rootca.pem:/usr/local/share/ca-certificates/rootca.crt"
+    environment:
+      - "BASE_URL=${MISP_BASE_URL}"
+      - "CRON_USER_ID=${CRON_USER_ID}"
+      - "CRON_PULLALL=${CRON_PULLALL}"
+      - "CRON_PUSHALL=${CRON_PUSHALL}"
+      - "DISABLE_IPV6=${DISABLE_IPV6}"
+      - "DISABLE_SSL_REDIRECT=${DISABLE_SSL_REDIRECT}"
+      - "ENABLE_DB_SETTINGS=${ENABLE_DB_SETTINGS}"
+      - "ENABLE_BACKGROUND_UPDATES=${ENABLE_BACKGROUND_UPDATES}"
+      - "ENCRYPTION_KEY=${ENCRYPTION_KEY}"
+      - "DISABLE_CA_REFRESH=${DISABLE_CA_REFRESH}"
+      # standard settings
+      - "ADMIN_EMAIL=${ADMIN_EMAIL}"
+      - "ADMIN_PASSWORD=${ADMIN_PASSWORD}"
+      - "ADMIN_KEY=${ADMIN_KEY}"
+      - "ADMIN_ORG=${ADMIN_ORG}"
+      - "ADMIN_ORG_UUID=${ADMIN_ORG_UUID}"
+      - "GPG_PASSPHRASE=${GPG_PASSPHRASE}"
+      - "ATTACHMENTS_DIR=${ATTACHMENTS_DIR}"
+      # OIDC authentication settings
+      - "OIDC_ENABLE=${OIDC_ENABLE}"
+      - "OIDC_PROVIDER_URL=${OIDC_PROVIDER_URL}"
+      - "OIDC_CLIENT_ID=${OIDC_CLIENT_ID}"
+      - "OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}"
+      - "OIDC_ROLES_PROPERTY=${OIDC_ROLES_PROPERTY}"
+      - "OIDC_ROLES_MAPPING=${OIDC_ROLES_MAPPING}"
+      - "OIDC_DEFAULT_ORG=${OIDC_DEFAULT_ORG}"
+      - "OIDC_LOGOUT_URL=${OIDC_LOGOUT_URL}"
+      - "OIDC_SCOPES=${OIDC_SCOPES}"
+      - "OIDC_MIXEDAUTH=${OIDC_MIXEDAUTH}"
+      # APACHESECUREAUTH authentication settings
+      - "APACHESECUREAUTH_LDAP_OLD_VAR_DETECT=${LDAP_ENABLE}"
+      - "APACHESECUREAUTH_LDAP_ENABLE=${APACHESECUREAUTH_LDAP_ENABLE:-${LDAP_ENABLE}}"
+      - "APACHESECUREAUTH_LDAP_APACHE_ENV=${APACHESECUREAUTH_LDAP_APACHE_ENV:-${LDAP_APACHE_ENV}}"
+      - "APACHESECUREAUTH_LDAP_SERVER=${APACHESECUREAUTH_LDAP_SERVER:-${LDAP_SERVER}}"
+      - "APACHESECUREAUTH_LDAP_STARTTLS=${APACHESECUREAUTH_LDAP_STARTTLS:-${LDAP_STARTTLS}}"
+      - "APACHESECUREAUTH_LDAP_READER_USER=${APACHESECUREAUTH_LDAP_READER_USER:-${LDAP_READER_USER}}"
+      - "APACHESECUREAUTH_LDAP_READER_PASSWORD=${APACHESECUREAUTH_LDAP_READER_PASSWORD:-${LDAP_READER_PASSWORD}}"
+      - "APACHESECUREAUTH_LDAP_DN=${APACHESECUREAUTH_LDAP_DN:-${LDAP_DN}}"
+      - "APACHESECUREAUTH_LDAP_SEARCH_FILTER=${APACHESECUREAUTH_LDAP_SEARCH_FILTER:-${LDAP_SEARCH_FILTER}}"
+      - "APACHESECUREAUTH_LDAP_SEARCH_ATTRIBUTE=${APACHESECUREAUTH_LDAP_SEARCH_ATTRIBUTE:-${LDAP_SEARCH_ATTRIBUTE}}"
+      - "APACHESECUREAUTH_LDAP_FILTER=${APACHESECUREAUTH_LDAP_FILTER:-${LDAP_FILTER}}"
+      - "APACHESECUREAUTH_LDAP_DEFAULT_ROLE_ID=${APACHESECUREAUTH_LDAP_DEFAULT_ROLE_ID:-${LDAP_DEFAULT_ROLE_ID}}"
+      - "APACHESECUREAUTH_LDAP_DEFAULT_ORG=${APACHESECUREAUTH_LDAP_DEFAULT_ORG:-${LDAP_DEFAULT_ORG}}"
+      - "APACHESECUREAUTH_LDAP_EMAIL_FIELD=${APACHESECUREAUTH_LDAP_EMAIL_FIELD:-${LDAP_EMAIL_FIELD}}"
+      - "APACHESECUREAUTH_LDAP_OPT_PROTOCOL_VERSION=${APACHESECUREAUTH_LDAP_OPT_PROTOCOL_VERSION:-${LDAP_OPT_PROTOCOL_VERSION}}"
+      - "APACHESECUREAUTH_LDAP_OPT_NETWORK_TIMEOUT=${APACHESECUREAUTH_LDAP_OPT_NETWORK_TIMEOUT:-${LDAP_OPT_NETWORK_TIMEOUT}}"
+      - "APACHESECUREAUTH_LDAP_OPT_REFERRALS=${APACHESECUREAUTH_LDAP_OPT_REFERRALS:-${LDAP_OPT_REFERRALS}}"
+      # LdapAuth MISP authentication settings
+      - "LDAPAUTH_ENABLE=${LDAPAUTH_ENABLE}"
+      - "LDAPAUTH_LDAPSERVER=${LDAPAUTH_LDAPSERVER}"
+      - "LDAPAUTH_LDAPDN=${LDAPAUTH_LDAPDN}"
+      - "LDAPAUTH_LDAPREADERUSER=${LDAPAUTH_LDAPREADERUSER}"
+      - "LDAPAUTH_LDAPREADERPASSWORD=${LDAPAUTH_LDAPREADERPASSWORD}"
+      - "LDAPAUTH_LDAPSEARCHFILTER=${LDAPAUTH_LDAPSEARCHFILTER}"
+      - "LDAPAUTH_LDAPSEARCHATTRIBUTE=${LDAPAUTH_LDAPSEARCHATTRIBUTE}"
+      - "LDAPAUTH_LDAPEMAILFIELD=${LDAPAUTH_LDAPEMAILFIELD}"
+      - "LDAPAUTH_LDAPNETWORKTIMEOUT=${LDAPAUTH_LDAPNETWORKTIMEOUT}"
+      - "LDAPAUTH_LDAPPROTOCOL=${LDAPAUTH_LDAPPROTOCOL}"
+      - "LDAPAUTH_LDAPALLOWREFERRALS=${LDAPAUTH_LDAPALLOWREFERRALS}"
+      - "LDAPAUTH_STARTTLS=${LDAPAUTH_STARTTLS}"
+      - "LDAPAUTH_MIXEDAUTH=${LDAPAUTH_MIXEDAUTH}"
+      - "LDAPAUTH_LDAPDEFAULTORGID=${LDAPAUTH_LDAPDEFAULTORGID}"
+      - "LDAPAUTH_LDAPDEFAULTROLEID=${LDAPAUTH_LDAPDEFAULTROLEID}"
+      - "LDAPAUTH_UPDATEUSER=${LDAPAUTH_UPDATEUSER}"
+      - "LDAPAUTH_DEBUG=${LDAPAUTH_DEBUG}"
+      - "LDAPAUTH_LDAPTLSREQUIRECERT=${LDAPAUTH_LDAPTLSREQUIRECERT}"
+      - "LDAPAUTH_LDAPTLSCUSTOMCACERT=${LDAPAUTH_LDAPTLSCUSTOMCACERT}"
+      - "LDAPAUTH_LDAPTLSCRLCHECK=${LDAPAUTH_LDAPTLSCRLCHECK}"
+      - "LDAPAUTH_LDAPTLSPROTOCOLMIN=${LDAPAUTH_LDAPTLSPROTOCOLMIN}"
+      # AAD authentication settings
+      - "AAD_ENABLE=${AAD_ENABLE}"
+      - "AAD_CLIENT_ID=${AAD_CLIENT_ID}"
+      - "AAD_TENANT_ID=${AAD_TENANT_ID}"
+      - "AAD_CLIENT_SECRET=${AAD_CLIENT_SECRET}"
+      - "AAD_REDIRECT_URI=${AAD_REDIRECT_URI}"
+      - "AAD_PROVIDER=${AAD_PROVIDER}"
+      - "AAD_PROVIDER_USER=${AAD_PROVIDER_USER}"
+      - "AAD_MISP_USER=${AAD_MISP_USER}"
+      - "AAD_MISP_ORGADMIN=${AAD_MISP_ORGADMIN}"
+      - "AAD_MISP_SITEADMIN=${AAD_MISP_SITEADMIN}"
+      - "AAD_CHECK_GROUPS=${AAD_CHECK_GROUPS}"
+      # nginx settings
+      - "NGINX_X_FORWARDED_FOR=${NGINX_X_FORWARDED_FOR}"
+      - "NGINX_SET_REAL_IP_FROM=${NGINX_SET_REAL_IP_FROM}"
+      - "NGINX_CLIENT_MAX_BODY_SIZE=${NGINX_CLIENT_MAX_BODY_SIZE:-50M}"
+      # proxy settings
+      - "PROXY_ENABLE=${PROXY_ENABLE}"
+      - "PROXY_HOST=${PROXY_HOST}"
+      - "PROXY_PORT=${PROXY_PORT}"
+      - "PROXY_METHOD=${PROXY_METHOD}"
+      - "PROXY_USER=${PROXY_USER}"
+      - "PROXY_PASSWORD=${PROXY_PASSWORD}"
+      # sync server settings (see https://www.misp-project.org/openapi/#tag/Servers for more options)
+      - "SYNCSERVERS=${SYNCSERVERS}"
+      - |
+        SYNCSERVERS_1_DATA=
+        {
+          "remote_org_uuid": "${SYNCSERVERS_1_UUID}",
+          "name": "${SYNCSERVERS_1_NAME}",
+          "authkey": "${SYNCSERVERS_1_KEY}",
+          "url": "${SYNCSERVERS_1_URL}",
+          "pull_rules": "${SYNCSERVERS_1_PULL_RULES}",
+          "pull": true
+        }
+      # mysql settings
+      - "MYSQL_HOST=${MYSQL_HOST:-db}"
+      - "MYSQL_PORT=${MYSQL_PORT:-3306}"
+      - "MYSQL_USER=${MYSQL_USER:-misp}"
+      - "MYSQL_PASSWORD=${MYSQL_PASSWORD:-example}"
+      - "MYSQL_DATABASE=${MYSQL_DATABASE:-misp}"
+      # redis settings
+      - "REDIS_HOST=${REDIS_HOST:-redis}"
+      - "REDIS_PORT=${REDIS_PORT:-6379}"
+      - "REDIS_PASSWORD=${REDIS_PASSWORD:-redispassword}"
+      # debug setting
+      - "DEBUG=${DEBUG}"
+      # SMTP setting
+      - "SMTP_FQDN=${SMTP_FQDN}"
+      # NGINX settings
+      - "FASTCGI_READ_TIMEOUT=${FASTCGI_READ_TIMEOUT:-300s}"
+      - "FASTCGI_SEND_TIMEOUT=${FASTCGI_SEND_TIMEOUT:-300s}"
+      - "FASTCGI_CONNECT_TIMEOUT=${FASTCGI_CONNECT_TIMEOUT:-300s}"
+      - "FASTCGI_STATUS_LISTEN=${FASTCGI_STATUS_LISTEN}"
+      # PHP settings
+      - "PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-2048M}"
+      - "PHP_MAX_EXECUTION_TIME=${PHP_MAX_EXECUTION_TIME:-300}"
+      - "PHP_UPLOAD_MAX_FILESIZE=${PHP_UPLOAD_MAX_FILESIZE:-50M}"
+      - "PHP_POST_MAX_SIZE=${PHP_POST_MAX_SIZE:-50M}"
+      - "PHP_MAX_INPUT_TIME:${PHP_MAX_INPUT_TIME:-300}"
+      - "PHP_MAX_FILE_UPLOADS=${PHP_MAX_FILE_UPLOADS:-50}"
+      # PHP FPM pool setup
+      - "PHP_FCGI_CHILDREN=${PHP_FCGI_CHILDREN:-5}"
+      - "PHP_FCGI_START_SERVERS=${PHP_FCGI_START_SERVERS:-2}"
+      - "PHP_FCGI_SPARE_SERVERS=${PHP_FCGI_SPARE_SERVERS:-1}"
+      - "PHP_FCGI_MAX_REQUESTS=${PHP_FCGI_MAX_REQUESTS:-0}"
+      # additional PHP settings
+      - "PHP_SESSION_TIMEOUT=${PHP_SESSION_TIMEOUT:-60}"
+      - "PHP_SESSION_COOKIE_TIMEOUT=${PHP_SESSION_COOKIE_TIMEOUT:-10080}"
+      - "PHP_SESSION_DEFAULTS=${PHP_SESSION_DEFAULTS:-php}"
+      - "PHP_SESSION_AUTO_REGENERATE=${PHP_SESSION_AUTO_REGENERATE:-false}"
+      - "PHP_SESSION_CHECK_AGENT=${PHP_SESSION_CHECK_AGENT:-false}"
+      - "PHP_SESSION_COOKIE_SECURE=${PHP_SESSION_COOKIE_SECURE:-true}"
+      - "PHP_SESSION_COOKIE_DOMAIN=${PHP_SESSION_COOKIE_DOMAIN}"
+      - "PHP_SESSION_COOKIE_SAMESITE=${PHP_SESSION_COOKIE_SAMESITE:-Lax}"
+      - "PHP_TIMEZONE=${PHP_TIMEZONE:-UTC}"
+      # security settings
+      - "HSTS_MAX_AGE=${HSTS_MAX_AGE}"
+      - "X_FRAME_OPTIONS=${X_FRAME_OPTIONS}"
+      - "CONTENT_SECURITY_POLICY=${CONTENT_SECURITY_POLICY}"
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  misp-modules:
+    image: ghcr.io/misp/misp-docker/misp-modules:${MODULES_RUNNING_TAG:-latest}
+    container_name: misp-modules
+    build:
+      context: misp/modules/.
+      args:
+        - MODULES_TAG=${MODULES_TAG:?Missing .env file, see README.md for instructions}
+        - MODULES_COMMIT=${MODULES_COMMIT}
+        - MODULES_FLAVOR=${MODULES_FLAVOR:-full}
+    healthcheck:
+      test: "/bin/bash -c '</dev/tcp/localhost/6666'"
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    volumes:
+      # custom MISP modules are loaded at startup time
+      - "./custom/action_mod/:/custom/action_mod/"
+      - "./custom/expansion/:/custom/expansion/"
+      - "./custom/export_mod/:/custom/export_mod/"
+      - "./custom/import_mod/:/custom/import_mod/"
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  #####END-MISP####
+
+
+
+  cyberchef:
+    image: mpepping/cyberchef
+    container_name: cyberchef
+    restart: unless-stopped
+    ports:
+      - "7004:8000"
+    networks:
+      - cyber-blue
+
+  os01:
+    image: opensearchproject/opensearch:$OS_VERSION
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+      memlock:
+        soft: -1
+        hard: -1
+    container_name: $OS_NODE1
+    environment:
+      - node.name=$OS_NODE1
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms$OS_JAVA_MEM -Xmx$OS_JAVA_MEM"
+      - DISABLE_SECURITY_PLUGIN=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - discovery.type=single-node
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  arkime:
+    build:
+      context: ./arkime
+      dockerfile: Dockerfile
+    container_name: arkime
+    depends_on:
+      - $OS_NODE1
+      # uncomment and add all OS node container names
+      # - $OS_NODE2
+    environment:
+      - OS_HOST=$OS_NODE1
+      - OS_PORT=9200
+    ports:
+      - $ARKIME_PORT:8005
+      - "7008:8005"
+    volumes:
+      - arkime_config:/data/config
+      - arkime_logs:/data/logs
+      - type: bind
+        source: $PCAP_DIR
+        target: /data/pcap
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  fleet-redis:
+    image: redis:6.2
+    container_name: fleet-redis
+    restart: always
+    ports:
+      - "6390:6379"
+    networks:
+      - cyber-blue
+
+  fleet-mysql:
+    image: mysql:8.0
+    container_name: fleet-mysql
+    restart: always
+    command: --innodb-buffer-pool-size=512M --innodb-flush-log-at-trx-commit=2 --skip-log-bin
+    environment:
+      MYSQL_ROOT_PASSWORD: fleetroot
+      MYSQL_DATABASE: fleet
+      MYSQL_USER: fleet
+      MYSQL_PASSWORD: fleetpass
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-pfleetroot" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - fleet-mysql-data:/var/lib/mysql
+    networks:
+      - cyber-blue
+
+  fleet-server:
+    image: fleetdm/fleet:latest
+    container_name: fleet-server
+    depends_on:
+      fleet-mysql:
+        condition: service_healthy
+      fleet-redis:
+        condition: service_started
+    ports:
+      - "7007:8080" # Fleet Web UI
+    environment:
+      FLEET_MYSQL_USERNAME: fleet
+      FLEET_MYSQL_PASSWORD: fleetpass
+      FLEET_MYSQL_DATABASE: fleet
+      FLEET_MYSQL_ADDRESS: fleet-mysql:3306
+      FLEET_REDIS_ADDRESS: fleet-redis:6379
+      FLEET_SERVER_ADDRESS: 0.0.0.0:8080
+      FLEET_APP_URL: http://localhost:9010
+      FLEET_SERVER_TLS: "false"
+    volumes:
+      - fleet-server-data:/var/lib/fleet
+    restart: unless-stopped
+    networks:
+      - cyber-blue
+
+  thehive:
+    image: strangebee/thehive:5.3.9-1
+    container_name: thehive
+    restart: unless-stopped
+    ports:
+      - "7005:9000"
+    networks:
+      - cyber-blue
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.2
+    container_name: elasticsearch
+    environment:
+      - http.host=0.0.0.0
+      - discovery.type=single-node
+      - script.allowed_types=inline
+      - thread_pool.search.queue_size=100000
+      - thread_pool.write.queue_size=10000
+    restart: unless-stopped
+    ports:
+      - "9210:9200"
+      - "9300:9300"
+    networks:
+      - cyber-blue
+
+  cortex:
+    image: thehiveproject/cortex:latest
+    container_name: cortex
+    environment:
+      - job_directory=${job_directory}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    #  - ${job_directory}:${job_directory}
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:7006:9001"
+    networks:
+      - cyber-blue
+
+  generator:
+    image: wazuh/wazuh-certs-generator:0.0.2
+    container_name: wazuh-cert-genrator
+    hostname: wazuh-certs-generator
+    command: generate-indexer-certs
+    restart: "no"
+    volumes:
+      - ./wazuh/config/certs.yml:/config/certs.yml
+      - ./wazuh/config/wazuh_indexer_ssl_certs/:/certificates/
+    networks:
+      - cyber-blue
+
+  wazuh.manager:
+    image: wazuh/wazuh-manager:4.12.0
+    container_name: wazuh-manager
+    hostname: wazuh.manager
+    restart: always
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 655360
+        hard: 655360
+    ports:
+      - "1514:1514"
+      - "1515:1515"
+      - "514:514/udp"
+      - "55000:55000"
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - FILEBEAT_SSL_VERIFICATION_MODE=full
+      - SSL_CERTIFICATE_AUTHORITIES=/etc/ssl/root-ca.pem
+      - SSL_CERTIFICATE=/etc/ssl/filebeat.pem
+      - SSL_KEY=/etc/ssl/filebeat.key
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+    volumes:
+      - wazuh_api_configuration:/var/ossec/api/configuration
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_var_multigroups:/var/ossec/var/multigroups
+      - wazuh_integrations:/var/ossec/integrations
+      - wazuh_active_response:/var/ossec/active-response/bin
+      - wazuh_agentless:/var/ossec/agentless
+      - wazuh_wodles:/var/ossec/wodles
+      - filebeat_etc:/etc/filebeat
+      - filebeat_var:/var/lib/filebeat
+      - ./wazuh/config/wazuh_indexer_ssl_certs/root-ca-manager.pem:/etc/ssl/root-ca.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.manager.pem:/etc/ssl/filebeat.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.manager-key.pem:/etc/ssl/filebeat.key
+      - ./wazuh/config/wazuh_cluster/wazuh_manager.conf:/wazuh-config-mount/etc/ossec.conf
+    depends_on:
+      - generator
+
+  wazuh.indexer:
+    image: wazuh/wazuh-indexer:4.12.0
+    container_name: wazuh-indexer
+    hostname: wazuh.indexer
+    restart: always
+    ports:
+      - "9200:9200"
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - wazuh-indexer-data:/var/lib/wazuh-indexer
+      - ./wazuh/config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-indexer/certs/root-ca.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.indexer-key.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.key
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.indexer.pem:/usr/share/wazuh-indexer/certs/wazuh.indexer.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/admin.pem:/usr/share/wazuh-indexer/certs/admin.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/admin-key.pem:/usr/share/wazuh-indexer/certs/admin-key.pem
+      - ./wazuh/config/wazuh_indexer/wazuh.indexer.yml:/usr/share/wazuh-indexer/opensearch.yml
+      - ./wazuh/config/wazuh_indexer/internal_users.yml:/usr/share/wazuh-indexer/opensearch-security/internal_users.yml
+    depends_on:
+      - generator
+
+  wazuh.dashboard:
+    image: wazuh/wazuh-dashboard:4.12.0
+    container_name: wazuh-dashboard
+    hostname: wazuh.dashboard
+    restart: always
+    ports:
+      - 7001:5601
+    environment:
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=SecretPassword
+      - WAZUH_API_URL=https://wazuh.manager
+      - DASHBOARD_USERNAME=kibanaserver
+      - DASHBOARD_PASSWORD=kibanaserver
+      - API_USERNAME=wazuh-wui
+      - API_PASSWORD=MyS3cr37P450r.*-
+    volumes:
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.dashboard.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/wazuh.dashboard-key.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem
+      - ./wazuh/config/wazuh_indexer_ssl_certs/root-ca.pem:/usr/share/wazuh-dashboard/certs/root-ca.pem
+      - ./wazuh/config/wazuh_dashboard/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml
+      - ./wazuh/config/wazuh_dashboard/wazuh.yml:/usr/share/wazuh-dashboard/data/wazuh/config/wazuh.yml
+      - wazuh-dashboard-config:/usr/share/wazuh-dashboard/data/wazuh/config
+      - wazuh-dashboard-custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
+    depends_on:
+      - wazuh.indexer
+      - generator
+    links:
+      - wazuh.indexer:wazuh.indexer
+      - wazuh.manager:wazuh.manager
+
+  opensearch-init:
+    image: alpine
+    container_name: opensearch-init
+    volumes:
+      - ./shuffle/shuffle-database:/usr/share/opensearch/data
+    command: chown -R 1000:1000 /usr/share/opensearch/data
+    restart: "no"
+
+  shuffle-frontend:
+    image: ghcr.io/shuffle/shuffle-frontend:latest
+    container_name: shuffle-frontend
+    hostname: shuffle-frontend
+    ports:
+      - "${FRONTEND_PORT}:80"
+      - "${FRONTEND_PORT_HTTPS}:443"
+    networks:
+      - cyber-blue
+    environment:
+      - BACKEND_HOSTNAME=${BACKEND_HOSTNAME}
+    restart: unless-stopped
+    depends_on:
+      - shuffle-backend
+
+  shuffle-backend:
+    image: ghcr.io/shuffle/shuffle-backend:latest
+    container_name: shuffle-backend
+    hostname: ${BACKEND_HOSTNAME}
+    ports:
+      - "${BACKEND_PORT}:5001"
+    networks:
+      - cyber-blue
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./shuffle/shuffle-apps:/shuffle-apps:z
+      - ./shuffle/shuffle-files:/shuffle-files:z
+    env_file: .env
+    environment:
+      - SHUFFLE_APP_HOTLOAD_FOLDER=/shuffle-apps
+      - SHUFFLE_FILE_LOCATION=/shuffle-files
+    restart: unless-stopped
+
+  shuffle-orborus:
+    image: ghcr.io/shuffle/shuffle-orborus:latest
+    container_name: shuffle-orborus
+    hostname: shuffle-orborus
+    networks:
+      - cyber-blue
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - SHUFFLE_APP_SDK_TIMEOUT=300
+      - SHUFFLE_ORBORUS_EXECUTION_CONCURRENCY=7
+      - ENVIRONMENT_NAME=Shuffle
+      - ORG_ID=Shuffle
+      - BASE_URL=http://${OUTER_HOSTNAME}:5001
+      - DOCKER_API_VERSION=1.40
+      - SHUFFLE_WORKER_IMAGE=ghcr.io/shuffle/shuffle-worker:latest
+      - SHUFFLE_STATS_DISABLED=true
+      - SHUFFLE_LOGS_DISABLED=true
+    env_file: .env
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+
+  shuffle-opensearch:
+    image: opensearchproject/opensearch:3.0.0
+    container_name: shuffle-opensearch
+    hostname: shuffle-opensearch
+    environment:
+      - "OPENSEARCH_JAVA_OPTS=-Xms1024m -Xmx1024m"
+      - bootstrap.memory_lock=true
+      - DISABLE_PERFORMANCE_ANALYZER_AGENT_CLI=true
+      - cluster.initial_master_nodes=shuffle-opensearch
+      - cluster.routing.allocation.disk.threshold_enabled=false
+      - cluster.name=shuffle-cluster
+      - node.name=shuffle-opensearch
+      - node.store.allow_mmap=false
+      - discovery.seed_hosts=shuffle-opensearch
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${SHUFFLE_OPENSEARCH_PASSWORD}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - ./shuffle/shuffle-database:/usr/share/opensearch/data:z
+    ports:
+      - 9201:9200
+    networks:
+      - cyber-blue
+    restart: unless-stopped
+    depends_on:
+      - opensearch-init
+
+  openvas:
+    image: immauss/openvas:latest
+    container_name: openvas
+    hostname: openvas
+    network_mode: "host"
+    environment:
+      - SKIPSYNC=true
+      - PASSWORD=cyberblue
+      - TZ=Asia/Riyadh
+      - GSAD_ARGS=--port=7014
+    volumes:
+      - ./openvas/data:/var/lib/openvas
+      - ./openvas/logs:/var/log/openvas
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    security_opt:
+      - seccomp:unconfined
+
+  caldera:
+    build:
+      context: ./caldera
+      dockerfile: Dockerfile
+      args:
+        - VARIANT=full
+    container_name: caldera
+    hostname: caldera
+    ports:
+      - "7009:8888"
+    volumes:
+      - ./caldera/conf/local.yml:/usr/src/app/conf/local.yml:ro
+      - ./caldera/data:/usr/src/app/data
+      - ./caldera/logs:/usr/src/app/logs
+    networks:
+      - cyber-blue
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    working_dir: /usr/src/app
+
+volumes:
+  wazuh_api_configuration:
+  wazuh_etc:
+  wazuh_logs:
+  wazuh_queue:
+  wazuh_var_multigroups:
+  wazuh_integrations:
+  wazuh_active_response:
+  wazuh_agentless:
+  wazuh_wodles:
+  filebeat_etc:
+  filebeat_var:
+  wazuh-indexer-data:
+  wazuh-dashboard-config:
+  wazuh-dashboard-custom:
+  mysql_data:
+  fleet-mysql-data:
+  fleet-server-data:
+  arkime_config:
+  arkime_logs:
+  os01_data:
+  yeti-exports:
+  yeti-db:
+  portainer_data:
+
+
+networks:
+  cyber-blue:
+    name: cyber-blue
+    driver: bridge
