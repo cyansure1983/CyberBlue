@@ -14,7 +14,7 @@
 # ✅ Automatic prerequisite detection and installation
 # ✅ Full Docker and Docker Compose setup
 # ✅ Complete CyberBlue SOC platform deployment
-# ✅ Works on AWS, Azure, GCP, VMware, VirtualBox, bare metal
+# ✅ Works on AWS, VMware, VirtualBox, bare metal
 # ============================================================================
 
 set -e  # Exit on error
@@ -545,11 +545,37 @@ if ! grep -q "^YETI_AUTH_SECRET_KEY=" .env; then
     echo -e "${CYAN}   [ENV]${NC} Generated YETI_AUTH_SECRET_KEY"
 fi
 
+# Generate MISP ADMIN_KEY (CRITICAL for auto-creating admin user!)
+if ! grep -q "^ADMIN_KEY=.\+" .env 2>/dev/null || grep -q "^ADMIN_KEY=$" .env 2>/dev/null; then
+    # ADMIN_KEY is missing or empty - generate one
+    if grep -q "^ADMIN_KEY=" .env; then
+        # Replace empty ADMIN_KEY
+        sed -i 's/^ADMIN_KEY=$/ADMIN_KEY=cyberblue-auto-generated-admin-key/' .env
+    else
+        # Add ADMIN_KEY
+        echo "ADMIN_KEY=cyberblue-auto-generated-admin-key" >> .env
+    fi
+    echo -e "${CYAN}   [ENV]${NC} Generated ADMIN_KEY (required for MISP admin user auto-creation)"
+else
+    echo -e "${CYAN}   [ENV]${NC} ADMIN_KEY already set"
+fi
+
+# Ensure ADMIN_EMAIL and ADMIN_PASSWORD are set
+if ! grep -q "^ADMIN_EMAIL=" .env; then
+    echo "ADMIN_EMAIL=admin@admin.test" >> .env
+    echo -e "${CYAN}   [ENV]${NC} Set ADMIN_EMAIL=admin@admin.test"
+fi
+
+if ! grep -q "^ADMIN_PASSWORD=" .env; then
+    echo "ADMIN_PASSWORD=admin" >> .env
+    echo -e "${CYAN}   [ENV]${NC} Set ADMIN_PASSWORD=admin"
+fi
+
 # Prepare YETI directory
 sudo mkdir -p /opt/yeti/bloomfilters
 echo -e "${CYAN}   [DIR]${NC} Created /opt/yeti/bloomfilters"
 
-echo -e "${GREEN}✅ Environment configured${NC}"
+echo -e "${GREEN}✅ Environment configured (MISP admin auto-creation enabled)${NC}"
 
 echo ""
 echo -e "${BLUE}🔍 Step 2.4: Network Interface Detection${NC}"
