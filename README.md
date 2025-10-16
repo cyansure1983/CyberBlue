@@ -13,12 +13,11 @@
 
 **CyberBlue** is a comprehensive, containerized cybersecurity **LEARNING PLATFORM** that brings together industry-leading open-source tools for **SIEM**, **DFIR**, **CTI**, **SOAR**, and **Network Analysis**. 
 
-### 📘 **Get the Full CyberBlueSOC Installation & User Guide**
-
-🚀 **Want to deploy CyberBlueSOC step-by-step in less than 60 minutes?**  
-Download the **Free 36-Page Installation Guide** that walks you through setup and key configurations.
-
-👉 **Access it here:** [**cyberblue.co**](https://cyberblue.co)
+> ### 📘 **Get the Full CyberBlueSOC Installation & User Guide**
+> 
+> 🚀 **Want to deploy CyberBlueSOC step-by-step in less than 60 minutes?**  
+> Download the **Free 36-Page Installation Guide** that walks you through setup and key configurations.
+> 👉 **Access it here:** [**cyberblue.co**](https://cyberblue.co)
 
 ## 🚨 **IMPORTANT SECURITY NOTICE**
 
