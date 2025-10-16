@@ -5,13 +5,20 @@
 [![Docker](https://img.shields.io/badge/Docker-20.10+-blue.svg)](https://www.docker.com/)
 [![Docker Compose](https://img.shields.io/badge/Docker%20Compose-2.0+-blue.svg)](https://docs.docker.com/compose/)
 [![Website](https://img.shields.io/badge/Website-cyberblue.co-blue.svg)](https://cyberblue.co)
-[![For](https://img.shields.io/badge/Purpose-EDUCATION%20ONLY-red.svg)](https://github.com/CyberBlue0/CyberBlue#-important-security-notice)
+[![For](https://img.shields.io/badge/Purpose-EDUCATION%20ONLY-red.svg)](https://github.com/CyberBlu3s/CyberBlue#-important-security-notice)
 
 # ⚠️ **EDUCATIONAL & TESTING ENVIRONMENT ONLY** ⚠️
 
 > **🎓 Learning & Training Platform** - Deploy 15+ integrated security tools for cybersecurity education and testing
 
 **CyberBlue** is a comprehensive, containerized cybersecurity **LEARNING PLATFORM** that brings together industry-leading open-source tools for **SIEM**, **DFIR**, **CTI**, **SOAR**, and **Network Analysis**. 
+
+### 📘 **Get the Full CyberBlueSOC Installation & User Guide**
+
+🚀 **Want to deploy CyberBlueSOC step-by-step in less than 60 minutes?**  
+Download the **Free 36-Page Installation Guide** that walks you through setup and key configurations.
+
+👉 **Access it here:** [**cyberblue.co**](https://cyberblue.co)
 
 ## 🚨 **IMPORTANT SECURITY NOTICE**
 
